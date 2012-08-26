@@ -1,0 +1,513 @@
+<html><head>
+<title>Roler Maps</title>
+<script type="text/javascript" src="http://grandareagame.com/rolermaps/jquery.min.js"></script>
+<script type="text/javascript" src="/nowjs/now.js"></script>
+
+<style type="text/css">
+	div#block {
+	    position: relative;
+	    margin-left: 5px;
+	}
+	div#chat {
+	    position: absolute;
+	    left: 805px;
+	    top: 0px;
+	    width: 150px;
+	    height: 600px;
+	    background: red; 
+	    overflow:auto;
+	    border:2px solid;
+	}
+	div#ui {
+		/*width: 100px;*/
+		height: 40px;
+		margin-top: 10px;
+		margin-left: 10px;
+	}
+	input {
+		width: 70px;
+		/*height: 50px;*/
+	}
+</style>
+
+<script>
+$(document).ready(function() {
+	// var myName = null;
+
+	now.ready(function() {
+		now.name = prompt("What's your name?", "");
+		now.distributeMessage("");
+	});
+
+	//
+	// Drawing code
+	//
+	var cb_canvas = null;
+	var cb_ctx = null;
+	var cb_lastPoints = null;
+	var cb_easing = 0.4;
+	var x_scale = 1;
+	var y_scale = 1;
+	var x_offset = 0;
+	var y_offset = 0;
+
+	var s = 36; //hexagon segment size   
+	var h = s/2;  
+	var r = s * 0.886025404; //maybe do it s/4 
+	var MAP_ORIGIN_X = -595;
+	var MAP_ORIGIN_Y = -615;
+	var MAP_ROWS = 42;
+	var MAP_COLS = 18*2;
+	var drawColor = "m";
+
+	// Setup event handlers
+	window.onload = init;
+	function init(e) {
+		cb_canvas = document.getElementById("cbook");
+
+		cb_lastPoints = Array();
+
+		if (cb_canvas.getContext) {
+			cb_ctx = cb_canvas.getContext('2d');
+
+			drawHexGrid(cb_ctx, MAP_ORIGIN_X, MAP_ORIGIN_Y, MAP_ROWS, MAP_COLS);
+
+			cb_ctx.lineWidth = 2;
+			cb_ctx.strokeStyle = "rgb(0, 0, 0)";
+			cb_ctx.beginPath();
+
+			cb_canvas.onmousedown = startDraw;
+			cb_canvas.onmouseup = stopDraw;
+			cb_canvas.ontouchstart = startDraw;
+			cb_canvas.ontouchstop = stopDraw;
+			cb_canvas.ontouchmove = drawMouse;
+			cb_canvas.ongesturechange = startResize;
+			cb_canvas.ongestureend = stopResize;
+		}
+	}
+
+	function startDraw(e) {
+		console.log("start draw");
+		if (e.touches) {
+			// Touch event
+			for (var i = 1; i <= e.touches.length; i++) {
+				cb_lastPoints[i] = getCoords(e.touches[i - 1]); // Get info for finger #1
+				cb_lastPoints[i].x -= x_offset;
+				cb_lastPoints[i].y -= y_offset;
+			}
+		}
+		else {
+			// Mouse event
+			cb_lastPoints[0] = getCoords(e);
+			// console.log("start last x: "+cb_lastPoints[0].x);
+			cb_lastPoints[0].x -= x_offset;
+			cb_lastPoints[0].y -= y_offset;
+			cb_canvas.onmousemove = drawMouse;
+		}
+		
+		return false;
+	}
+
+	// Called whenever cursor position changes after drawing has started
+	function stopDraw(e) {
+		e.preventDefault();
+		cb_canvas.onmousemove = null;
+	}
+
+	function drawMouse(e) {
+		if (e.touches) {
+			// Touch Enabled
+			for (var i = 1; i <= e.touches.length; i++) {
+				var p = getCoords(e.touches[i - 1]); // Get info for finger i
+				
+				var sX = cb_lastPoints[i].x;
+				var sY = cb_lastPoints[i].y;
+				var eX = p.x - x_offset;
+				var eY = p.y - y_offset;
+
+				var sending = drawColor + "," + sX + "," + sY + "," + eX + "," + eY;
+				console.log("draw color: "+drawColor+" sending "+sending);
+				now.distributeMessage(sending);
+			}
+		}
+		else {
+			// Not touch enabled
+			var p = getCoords(e);
+
+			var sX = cb_lastPoints[0].x;
+			var sY = cb_lastPoints[0].y;
+			var eX = p.x - x_offset;
+			var eY = p.y - y_offset;
+
+			var sending = drawColor + "," + sX + "," + sY + "," + eX + "," + eY;
+			console.log("draw color: "+drawColor+" sending: "+sending);
+			now.distributeMessage(sending);
+		}
+		return false;
+	}
+
+	function drawLineFromServer(arrStr) {
+		console.log("drawing line from server: " + arrStr);
+
+		var _eX;
+		var _eY;
+
+		var sX;
+		var sY;
+		var eX;
+		var eY;
+		var bigArr = arrStr.split(".");
+
+		for (var i = 0; i < bigArr.length; i++) {
+			var coorArr = bigArr[i].split(",");
+
+			lC = coorArr[0];
+			sX = parseInt(coorArr[1]);
+			sY = parseInt(coorArr[2]);
+			eX = parseInt(coorArr[3]);
+			eY = parseInt(coorArr[4]);
+
+			var _eX = eX;
+			var _eY = eY;
+
+			if (lC == "m") {
+				// console.log("filling map color");
+				// c.strokeStyle = sColor;
+
+				cb_ctx.strokeStyle = "rgba(0,0,0,1)";
+			} else if (lC == "r") {
+				cb_ctx.strokeStyle = "rgba(255,0,0,1)";
+			} else if (lC == "g") {
+				cb_ctx.strokeStyle = "rgba(0,255,0,1)";
+			} else if (lC == "b") {
+				cb_ctx.strokeStyle = "rgba(0,0,255,1)";
+			} else if (lC == "w") {
+				cb_ctx.strokeStyle = "rgba(255,255,255,1)";
+				cb_ctx.lineWidth = 10;
+			}
+
+			// console.log("before sX: " + sX + " sY: " + sY + " eX: " + eX + " eY: " + eY);
+
+			// console.log("x_offset: "+x_offset+" y_offset: "+y_offset);
+
+			sX += parseInt(x_offset);
+			sY += parseInt(y_offset);
+			eX += parseInt(x_offset);
+			eY += parseInt(y_offset);
+
+			// dont add offset to when drawing?
+
+			// console.log("after sX: " + sX + " sY: " + sY + " eX: " + eX + " eY: " + eY);
+
+			cb_ctx.moveTo(sX, sY);
+			cb_ctx.lineTo(eX, eY);
+
+			cb_ctx.stroke();
+			cb_ctx.closePath();
+			cb_ctx.lineWidth = 2;
+			// cb_ctx.fillStyle = "rgba(255,255,255,0.8)";
+			cb_ctx.beginPath();
+
+			cb_lastPoints[0] = {x: _eX, y: _eY};
+			cb_lastPoints[1] = {x: _eX, y: _eY};
+		}
+	}
+
+	// Called at start of gesture
+	function startResize(e) {
+		// console.log("gesture start");
+		// var name = prompt("What's your name?", "");
+	}
+
+	// Called at end of gesture
+	function stopResize(e) {
+		// console.log("gesture end");
+		// var name = prompt("What's your name?", "");
+	}
+
+	// Get the coordinates for a mouse or touch event
+	function getCoords(e) {
+		if (e.offsetX) {
+			return { x: e.offsetX, y: e.offsetY };
+		}
+		else if (e.layerX) {
+			return { x: e.layerX, y: e.layerY };
+		}
+		else {
+			return { x: e.pageX - cb_canvas.offsetLeft, y: e.pageY - cb_canvas.offsetTop };
+		}
+	}
+	//
+	// End drawing code
+	//
+
+	//	$.getScript("drawing.js", function(){
+	//	});
+
+	//	base64 encoding...
+	//	window.btoa();
+
+	now.getCleanMap = function() {
+		cb_canvas.width = cb_canvas.width;
+		// now.distributeMessage("");
+		drawHexGrid(cb_ctx, MAP_ORIGIN_X+x_offset, MAP_ORIGIN_Y+y_offset, MAP_ROWS, MAP_COLS);
+	}
+
+	now.receiveMessage = function(name, message) {
+//		$("#messages").append("<br>" + name + ": " + message);
+		// $("#messages").html(message);
+
+		// if (name != now.name){
+		drawLineFromServer(message);
+		// }
+	}
+
+	//
+	// Chat
+	//
+	now.receiveChat = function(name, chat) {
+		// console.log(chat);
+		$("#chatText").prepend(name + ": " + chat + "<br>");
+	}
+
+	$("#sendButton").click(function(){
+
+	    now.updateChat($("#messageText").val());
+	    $("#messageText").val("");
+	});
+	//
+	// End of Chat
+	//
+
+	//
+	// Controls
+	//
+	$("#startButton").click(function() {
+		cb_canvas.width = cb_canvas.width;
+		// now.name = "yes";
+		now.distributeMessage("");
+		// $("#messageText").val("");
+		drawHexGrid(cb_ctx, MAP_ORIGIN_X+x_offset, MAP_ORIGIN_Y+y_offset, MAP_ROWS, MAP_COLS);
+	});
+
+	$("#cleanButton").click(function(){
+		// cb_canvas.width = cb_canvas.width;
+		now.clearMap();	
+		// now.distributeMessage("");
+		// drawHexGrid(cb_ctx, MAP_ORIGIN_X+x_offset, MAP_ORIGIN_Y+y_offset, MAP_ROWS, MAP_COLS);
+
+		// now.distributeMessage("");
+	});
+
+	$("#blackButton").click(function(){
+		drawColor = "m";
+
+		// now.distributeMessage("");
+	});
+
+	$("#redButton").click(function(){
+		drawColor = "r";
+
+		// now.distributeMessage("");
+	});
+
+	$("#greenButton").click(function(){
+		drawColor = "g";			
+
+		// now.distributeMessage("");
+	});
+
+	$("#blueButton").click(function(){
+		drawColor = "b";
+
+		// now.distributeMessage("");
+	});
+
+	$("#whiteButton").click(function(){
+		drawColor = "w";
+
+		// now.distributeMessage("");
+	});
+
+	$("#upButton").click(function(){
+		cb_canvas.width = cb_canvas.width;
+
+		y_offset += 20;
+
+		console.log("shift up by: " + x_offset);
+
+		now.distributeMessage("");
+		drawHexGrid(cb_ctx, MAP_ORIGIN_X+x_offset, MAP_ORIGIN_Y+y_offset, MAP_ROWS, MAP_COLS);
+	});
+
+	$("#downButton").click(function(){
+		cb_canvas.width = cb_canvas.width;
+
+		y_offset -= 20;
+
+		now.distributeMessage("");
+		drawHexGrid(cb_ctx, MAP_ORIGIN_X+x_offset, MAP_ORIGIN_Y+y_offset, MAP_ROWS, MAP_COLS);
+	});
+
+	$("#leftButton").click(function(){
+		cb_canvas.width = cb_canvas.width;
+
+		x_offset += 20;
+
+		now.distributeMessage("");
+		drawHexGrid(cb_ctx, MAP_ORIGIN_X+x_offset, MAP_ORIGIN_Y+y_offset, MAP_ROWS, MAP_COLS);
+	});
+
+	$("#rightButton").click(function(){
+		cb_canvas.width = cb_canvas.width;
+
+		x_offset -= 20;
+
+		now.distributeMessage("");
+		drawHexGrid(cb_ctx, MAP_ORIGIN_X+x_offset, MAP_ORIGIN_Y+y_offset, MAP_ROWS, MAP_COLS);
+	});
+
+	$("#zoomInButton").click(function(){
+		// cb_canvas.width = cb_canvas.width;
+
+		// cb_ctx.translate(200, 0);
+		// cb_ctx.scale(1, 1);
+
+		// cb_canvas.style.width = '1200px';
+		// cb_canvas.width = 200;
+
+		// now.distributeMessage("");
+	});
+
+	$("#zoomOutButton").click(function(){
+		// cb_canvas.width = cb_canvas.width;
+
+		// cb_ctx.translate(200, 0);
+		// cb_ctx.scale(1, 1);
+
+		// cb_canvas.style.width = '1200px';
+		// cb_canvas.width = 200;
+
+		// now.distributeMessage("");
+	});
+	//
+	// End of Controls
+	//
+
+	//
+	// Hex drawing
+	//
+	function drawHexGrid(c, x, y, rows, cols)
+    {
+		var posx;
+		var posy;
+		var n;
+		var coord;
+
+		for (row = 0; row < rows; row++) 
+		{
+			//we space the hexagons on each line next column being on the row below 
+			for (col = 0; col < cols/2; col++) 
+			{
+				posy =   y + row * r;
+				posx  = (row & 1 ) * (h + s) + x + 2 * col  * (s + h);
+				coord = "(" + col + "," + row + ")";
+				drawHex(c, posx , posy, null, "rgba(0,0,0,1)", "rgba(0,0,0,1)", coord, null);
+			}
+		}
+	}
+
+	function drawHex(c, x0, y0, tColor, sColor, fColor, text, unit)
+	{
+	
+		// c.strokeStyle = sColor;
+		c.beginPath();
+		c.moveTo(x0, y0);
+		c.lineTo(x0 + s, y0);
+		c.lineTo(x0 + s + h, y0 + r);
+		c.lineTo(x0 + s, y0 + 2 * r);
+		c.lineTo(x0, y0 + 2 *r);
+		c.lineTo(x0 - h, y0 + r);
+		
+		if (tColor)
+		{
+		    // c.fillStyle = tColor;
+		    // c.fill();
+		}
+		
+		
+		c.closePath();
+		c.stroke();
+		
+		
+		if (text)
+		{
+		    c.font = "10px sans-serif"
+		    // c.fillStyle = fColor;
+		    c.fillText(text, x0 + h/2, y0 + 2 * r - 2);
+		}
+      }
+      
+      function drawHexGrid(c, x, y, rows, cols)
+      {
+		var posx;
+		var posy;
+		var n;
+		var coord;
+
+		for (row = 0; row < rows; row++) 
+		{
+			//we space the hexagons on each line next column being on the row below 
+			for (col = 0; col < cols/2; col++) 
+			{
+				posy =   y + row * r;
+				posx  = (row & 1 ) * (h + s) + x + 2 * col  * (s + h);
+				coord = "(" + col + "," + row + ")";
+				drawHex(c, posx , posy, null, "rgba(0,0,255,0.8)", "rgba(255,0,0,0.8)", coord, null);
+			}
+		}
+	}
+	//
+	// End of Hex
+	//
+});
+
+</script>
+</head>
+
+<body>
+	<div id="ui">
+		<input type="button" value="Clean Map" id="cleanButton">
+		
+		<input type="button" style="margin-left:60px" value="Black" id="blackButton">
+		<input type="button" value="Red" id="redButton">
+		<input type="button" value="Green" id="greenButton">
+		<input type="button" value="Blue" id="blueButton">
+		<input type="button" value="Clear" id="whiteButton">
+
+		<input type="button" style="margin-left:60px" value="Left" id="leftButton">
+		<input type="button" value="Right" id="rightButton">
+		<input type="button" value="Down" id="downButton">
+		<input type="button" value="Up" id="upButton">
+		<!-- 
+		<input type="button" value="Zoom In" id="zoomInButton">
+		<input type="button" value="Zoom Out" id="zoomOutButton">
+		 -->
+
+		<div id="messages">console: </div>
+	</div>
+
+	<div id="block">
+		<canvas id="cbook" width="800" height="600" style="position: relative; border: 2px solid #ccc;"> <strong>Your browser can not show this example. </canvas>
+
+		<div id="chat">Chat:<br><br>
+
+			<input type="text" style="height:30px; width: 140px; margin-left: 5px;" id="messageText"><br>
+			<input type="button" style="width: 140px; margin-left: 5px; margin-top:10px" value="Send" id="sendButton"><br><br>
+			<div id="chatText"></div>
+
+		</div>
+	</div>
+
+</body>
+</html>
