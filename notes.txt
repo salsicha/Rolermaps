@@ -1,0 +1,46 @@
+
+package
+nowJS compatible
+bundle tornado source
+improve logging
+user log in
+database connection (postgres)
+
+
+Usage:
+1. make sites_conf/ file and add libraries to file
+2. make js file and put it in import_js, include name in conf file
+3. make site html file, everything between the <body></body> tags go here
+4. make python methods to be called over rpc, put them in file in import_py, use same name as site
+
+
+Every transaction should include the 'id', which is the clients place in the clients list
+The initial response from the server to opening a connection should include the clients place in the list
+
+Including JS scripts in the template:
+- app receives a site request
+- gets the app name from path
+- looks for a config file with name that matches path
+- config file has a list of js files
+- in the includes folder there are class files with matching file names
+- these files get included in the template
+
+Running Python scripts from JS client:
+- websocket receives json string
+- string gets parsed
+- python classes from imports_py are imported at top of doople.py
+- method name in json message must match imported class/function name
+- method/function is called from its string name
+
+Running client JS scripts from server:
+- any script in the imports_py should be able to call SendJson()
+- the client takes the message string and runs the matching function
+
+
+- template the index page based on the site requested
+- dynamic function call
+- Index page needs to import declared scripts, parse json, run methods from strings, init.
+- Node client needs to do the same, plus packaging, init.
+- Server needs to import declared scripts, parse json, run methods from strings, packaged.
+- CouchDB
+- The node client can spawn children with cluster.fork. It can detect the CPU count. So a cluster Boolean should be sent to the node client (false means don't fork). And if it does fork the master will have to know how to apportion the tasks.

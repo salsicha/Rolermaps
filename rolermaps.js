@@ -4,7 +4,7 @@ var server = require('http').createServer(function(req, res) {
 });
 server.listen(8888);
 
-var nowjs = require("/usr/local/lib/node_modules/now");
+var nowjs = require("./node_modules/now");
 var everyone = nowjs.initialize(server);
 
 var fs = require('fs');
